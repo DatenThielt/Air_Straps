@@ -1,102 +1,152 @@
 package com.daten.AirStraps.items;
 
-import com.daten.AirStraps.AirStraps;
-import com.google.common.collect.ImmutableMap;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockStone;
-import net.minecraft.block.properties.IProperty;
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.client.Minecraft;
-import net.minecraft.creativetab.CreativeTabs;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.EnumHand;
-import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.util.text.TextComponentString;
-import net.minecraft.world.World;
-import org.apache.logging.log4j.Logger;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 
 public class ItemBasicStrap extends Item implements IStrapItem
 {
-    public float BlockRange = 2;
-    private static Logger logger;
+    public float blockRange = 2.0F;
     private Block selectedBlock;
-    private IBlockState selectedBlockState;
-    private ItemStack selectedItemStack;
+    private BlockState selectedBlockState;
+    private ItemStack selectedItemStack = ItemStack.EMPTY;
 
-    public ItemBasicStrap(String unlocalizedName, String registryName, float blockRange, int durability)
+    public ItemBasicStrap(float blockRange, int durability)
     {
-        super();
-
-        BlockRange = blockRange;
-        setNoRepair();
-        setMaxStackSize(1);
-        setMaxDamage(durability);
-        setRegistryName(registryName);
-        setCreativeTab(CreativeTabs.MISC);
-        setUnlocalizedName(AirStraps.MODID + "." + unlocalizedName);
+        super(new Item.Properties()
+                .stacksTo(1)
+                .durability(durability > 0 ? durability : 0)
+        );
+        this.blockRange = blockRange;
     }
 
     @Override
-    public ActionResult<ItemStack> onItemRightClick(World worldIn, EntityPlayer playerIn, EnumHand handIn)
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand)
     {
-        RayTraceResult rayTraceResult = playerIn.rayTrace(BlockRange, 1.0F);
-        IBlockState blockHit = worldIn.getBlockState(rayTraceResult.getBlockPos());
-        ItemStack stack = playerIn.getHeldItemMainhand();
+        ItemStack stack = player.getItemInHand(hand);
 
-        if (worldIn.isRemote) return super.onItemRightClick(worldIn, playerIn, handIn);
+        // Perform ray trace
+        BlockHitResult rayTraceResult = getPlayerPOVHitResult(level, player, ClipContext.Fluid.NONE);
+        BlockPos hitPos = rayTraceResult.getBlockPos();
+        BlockState blockHit = level.getBlockState(hitPos);
 
-        //Check for shift right click aka sneaking click
-        if(playerIn.isSneaking())
+        if (level.isClientSide) {
+            return InteractionResultHolder.success(stack);
+        }
+
+        // Check for shift right click (sneaking)
+        if (player.isCrouching())
         {
-            //If we shift-click a block we want to use that as the selected item.
-            if (rayTraceResult.typeOfHit == RayTraceResult.Type.BLOCK)
+            // If we shift-click a block we want to use that as the selected item
+            if (rayTraceResult.getType() == HitResult.Type.BLOCK)
             {
-                //Set the block as the block user wants to use,
+                // Set the block as the block user wants to use
                 selectedBlock = blockHit.getBlock();
 
-                //Store the blocks state so we know what to place down
+                // Store the block's state so we know what to place down
                 selectedBlockState = blockHit;
 
-                selectedItemStack = selectedBlock.getPickBlock(selectedBlockState,rayTraceResult,worldIn,rayTraceResult.getBlockPos(),playerIn);
+                // Get the item stack for this block
+                selectedItemStack = selectedBlock.getCloneItemStack(level, hitPos, blockHit);
 
-                //send the player a message telling them what kind of block they have selected.
-                if(selectedBlockState.getProperties().containsKey(BlockStone.VARIANT))
-                    playerIn.sendMessage(new TextComponentString("New AirBlock Selected: "+selectedBlockState.getValue(BlockStone.VARIANT).getName()));
-                else
-                    playerIn.sendMessage(new TextComponentString("New AirBlock Selected: "+selectedBlockState.getBlock().getLocalizedName()));
-
+                // Send the player a message telling them what kind of block they have selected
+                player.sendSystemMessage(Component.literal("New AirBlock Selected: " +
+                    selectedBlock.getName().getString()));
             }
         }
         else
         {
-            //If we have not selected a block yet, let the user know
-            if(selectedBlock == null)
+            // If we have not selected a block yet, let the user know
+            if (selectedBlock == null)
             {
-                playerIn.sendMessage(new TextComponentString("No block selected, Shift+Right click a block to set it as an AirBlock."));
-                return super.onItemRightClick(worldIn, playerIn, handIn);
+                player.sendSystemMessage(Component.literal(
+                    "No block selected, Shift+Right click a block to set it as an AirBlock."));
+                return InteractionResultHolder.pass(stack);
             }
 
-            //If we have a block,  make sure we are looking at the air, and that its not a mob.
-            if (rayTraceResult.typeOfHit == RayTraceResult.Type.MISS && worldIn.getEntitiesWithinAABB(EntityLivingBase.class, Block.FULL_BLOCK_AABB.offset(rayTraceResult.getBlockPos())).isEmpty())
-            {
-                //If the block we are trying to replace is replaceable, and we have the block in inventory,  Place away
-                if (blockHit.getBlock().isReplaceable(worldIn, rayTraceResult.getBlockPos()) && playerIn.inventory.hasItemStack(selectedItemStack))
-                {
-                    //Place the box with the desired block state,  Damage the Strap
-                    worldIn.setBlockState(rayTraceResult.getBlockPos(), selectedBlockState);
-                    stack.damageItem(20,playerIn);
+            // Perform ray trace for air placement
+            BlockHitResult airTrace = player.pick(blockRange, 1.0F, false);
+            BlockPos placePos = airTrace.getBlockPos();
+            BlockState stateAtPos = level.getBlockState(placePos);
 
-                    //Decrease the inventory
-                    int toFind = playerIn.inventory.findSlotMatchingUnusedItem(selectedItemStack);
-                    playerIn.inventory.decrStackSize(toFind,1);
+            // If we have a block, make sure we are looking at air or replaceable block
+            if (airTrace.getType() == HitResult.Type.MISS ||
+                stateAtPos.canBeReplaced())
+            {
+                // Check if there are no entities at the placement position
+                AABB checkBox = new AABB(placePos);
+                if (level.getEntitiesOfClass(LivingEntity.class, checkBox).isEmpty())
+                {
+                    // Check if player has the block in inventory
+                    if (hasItemInInventory(player, selectedItemStack))
+                    {
+                        // Place the block with the desired block state
+                        level.setBlock(placePos, selectedBlockState, 3);
+
+                        // Damage the strap (only if it has durability)
+                        if (stack.isDamageableItem()) {
+                            stack.hurtAndBreak(1, player, (p) -> p.broadcastBreakEvent(hand));
+                        }
+
+                        // Decrease the inventory
+                        if (!player.getAbilities().instabuild) {
+                            removeItemFromInventory(player, selectedItemStack);
+                        }
+
+                        return InteractionResultHolder.success(stack);
+                    }
                 }
             }
         }
-        return super.onItemRightClick(worldIn, playerIn, handIn);
+
+        return InteractionResultHolder.pass(stack);
+    }
+
+    private boolean hasItemInInventory(Player player, ItemStack itemStack)
+    {
+        if (itemStack.isEmpty()) return false;
+
+        for (ItemStack invStack : player.getInventory().items) {
+            if (ItemStack.isSameItemSameTags(invStack, itemStack)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void removeItemFromInventory(Player player, ItemStack itemStack)
+    {
+        if (itemStack.isEmpty()) return;
+
+        for (int i = 0; i < player.getInventory().items.size(); i++) {
+            ItemStack invStack = player.getInventory().items.get(i);
+            if (ItemStack.isSameItemSameTags(invStack, itemStack)) {
+                invStack.shrink(1);
+                break;
+            }
+        }
+    }
+
+    public static BlockHitResult getPlayerPOVHitResult(Level level, Player player, ClipContext.Fluid fluidMode) {
+        double reach = player.blockInteractionRange();
+        return level.clip(new ClipContext(
+                player.getEyePosition(1.0F),
+                player.getEyePosition(1.0F).add(player.getViewVector(1.0F).scale(reach)),
+                ClipContext.Block.OUTLINE,
+                fluidMode,
+                player
+        ));
     }
 }
-

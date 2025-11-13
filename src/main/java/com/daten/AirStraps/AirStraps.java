@@ -1,31 +1,27 @@
 package com.daten.AirStraps;
 
-import net.minecraft.init.Blocks;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.Mod.EventHandler;
-import net.minecraftforge.fml.common.event.FMLInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import org.apache.logging.log4j.Logger;
+import com.daten.AirStraps.init.ModItems;
+import com.mojang.logging.LogUtils;
+import net.minecraft.world.level.block.Blocks;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+import org.slf4j.Logger;
 
-@Mod(modid = AirStraps.MODID, name = AirStraps.NAME, version = AirStraps.VERSION)
+@Mod(AirStraps.MODID)
 public class AirStraps
 {
     public static final String MODID = "airstraps";
     public static final String NAME = "Air Straps";
     public static final String VERSION = "1.0";
 
-    private static Logger logger;
+    private static final Logger LOGGER = LogUtils.getLogger();
 
-    @EventHandler
-    public void preInit(FMLPreInitializationEvent event)
+    public AirStraps(IEventBus modEventBus)
     {
-        logger = event.getModLog();
-    }
+        // Register items
+        ModItems.ITEMS.register(modEventBus);
 
-    @EventHandler
-    public void init(FMLInitializationEvent event)
-    {
-        // some example code
-        logger.info("AIR STRAPS AIR STRAPS AIR STRAPS >> {}", Blocks.DIRT.getRegistryName());
+        LOGGER.info("Air Straps mod initialized");
+        LOGGER.info("AIR STRAPS >> {}", Blocks.DIRT.getName());
     }
 }
