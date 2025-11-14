@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
@@ -77,7 +78,10 @@ public class ItemBasicStrap extends Item implements IStrapItem
             }
 
             // Perform ray trace for air placement
-            BlockHitResult airTrace = player.pick(blockRange, 1.0F, false);
+            HitResult hitResult = player.pick(blockRange, 1.0F, false);
+            if (!(hitResult instanceof BlockHitResult airTrace)) {
+                return InteractionResultHolder.pass(stack);
+            }
             BlockPos placePos = airTrace.getBlockPos();
             BlockState stateAtPos = level.getBlockState(placePos);
 
@@ -97,7 +101,8 @@ public class ItemBasicStrap extends Item implements IStrapItem
 
                         // Damage the strap (only if it has durability)
                         if (stack.isDamageableItem()) {
-                            stack.hurtAndBreak(1, player, (p) -> p.broadcastBreakEvent(hand));
+                            EquipmentSlot slot = hand == InteractionHand.MAIN_HAND ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND;
+                            stack.hurtAndBreak(1, player, slot);
                         }
 
                         // Decrease the inventory
@@ -119,7 +124,7 @@ public class ItemBasicStrap extends Item implements IStrapItem
         if (itemStack.isEmpty()) return false;
 
         for (ItemStack invStack : player.getInventory().items) {
-            if (ItemStack.isSameItemSameTags(invStack, itemStack)) {
+            if (ItemStack.isSameItemSameComponents(invStack, itemStack)) {
                 return true;
             }
         }
@@ -132,7 +137,7 @@ public class ItemBasicStrap extends Item implements IStrapItem
 
         for (int i = 0; i < player.getInventory().items.size(); i++) {
             ItemStack invStack = player.getInventory().items.get(i);
-            if (ItemStack.isSameItemSameTags(invStack, itemStack)) {
+            if (ItemStack.isSameItemSameComponents(invStack, itemStack)) {
                 invStack.shrink(1);
                 break;
             }

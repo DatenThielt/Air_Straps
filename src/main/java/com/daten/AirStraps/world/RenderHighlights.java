@@ -11,6 +11,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.api.distmarker.Dist;
@@ -60,13 +61,16 @@ public class RenderHighlights
                     // Translate to block position relative to camera
                     poseStack.translate(pos.getX() - camX, pos.getY() - camY, pos.getZ() - camZ);
 
-                    // Render the outline
+                    // Get the bounding box from the shape
+                    AABB aabb = shape.bounds();
+
+                    // Render the outline using renderLineBox
                     VertexConsumer vertexConsumer = mc.renderBuffers().bufferSource().getBuffer(RenderType.lines());
-                    LevelRenderer.renderShape(
+                    LevelRenderer.renderLineBox(
                         poseStack,
                         vertexConsumer,
-                        shape,
-                        0.0D, 0.0D, 0.0D,
+                        aabb.minX, aabb.minY, aabb.minZ,
+                        aabb.maxX, aabb.maxY, aabb.maxZ,
                         1.0F, 1.0F, 1.0F, 0.4F
                     );
 
