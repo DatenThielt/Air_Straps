@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "airstraps:item/basic_strap"
+    "layer0": "airstraps:item/gold_strap"
   }
 }
